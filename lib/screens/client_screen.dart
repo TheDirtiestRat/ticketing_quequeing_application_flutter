@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:ticketing_quequeing_application/components/marque.dart';
 
 import '../services/client_service.dart';
-import 'menu_screen.dart';
+
+import 'package:window_manager/window_manager.dart';
 
 class ClientScreen extends StatefulWidget {
   final String hostAddress;
@@ -22,6 +24,8 @@ class ClientScreen extends StatefulWidget {
 }
 
 class _ClientScreenState extends State<ClientScreen> {
+  bool _isFullScreen = false;
+
   late final ClientService _client;
   late final Player _player;
   late final VideoController _videoController;
@@ -29,11 +33,10 @@ class _ClientScreenState extends State<ClientScreen> {
   String _status = 'Connecting...';
   bool _isConnected = false;
 
-  // Window state - dynamic list from host
-  List<Map<String, String>> _windows = [];
+  String window1Ticket = '---';
+  String window2Ticket = '---';
   List<Map<String, String>> nextQueue = [];
   int pendingCount = 0;
-  String _calledWindow = '';
 
   List<String> _playlist = [];
   int _currentPlaylistIndex = -1;
@@ -45,31 +48,47 @@ class _ClientScreenState extends State<ClientScreen> {
   @override
   void initState() {
     super.initState();
-    _windows = [
-      {'name': 'Window 1', 'ticket': '---'},
-      {'name': 'Window 2', 'ticket': '---'},
-    ];
     _player = Player();
     _videoController = VideoController(_player);
     _initPlayer();
     _initClient();
     _startClock();
+    _syncFullScreenState();
+  }
+
+  Future<void> _syncFullScreenState() async {
+    bool isFS = await windowManager.isFullScreen();
+    if (mounted) {
+      setState(() {
+        _isFullScreen = isFS;
+      });
+    }
+  }
+
+  Future<void> _toggleFullScreen() async {
+    bool isFS = await windowManager.isFullScreen();
+    await windowManager.setFullScreen(!isFS);
+
+    print("Pressed Going to Fullscreen");
+
+    if (mounted) {
+      setState(() {
+        _isFullScreen = !isFS;
+      });
+    }
   }
 
   void _initPlayer() {
     _completedSub = _player.stream.completed.listen((completed) async {
       if (!mounted || !completed) return;
-      if (_playlist.isEmpty) return;
-      final nextIndex = (_currentPlaylistIndex + 1) % _playlist.length;
-      await _playIndex(nextIndex);
+      if (_currentPlaylistIndex < _playlist.length - 1) {
+        await _playIndex(_currentPlaylistIndex + 1);
+      }
     });
   }
 
   void _initClient() {
-    _client = ClientService(
-      hostAddress: widget.hostAddress,
-      port: widget.port,
-    );
+    _client = ClientService(hostAddress: widget.hostAddress, port: widget.port);
 
     _client.onConnected = () {
       if (mounted) {
@@ -77,7 +96,6 @@ class _ClientScreenState extends State<ClientScreen> {
           _isConnected = true;
           _status = 'Connected to ${widget.hostAddress}:${widget.port}';
         });
-        _client.send('register', {'role': 'monitor'});
       }
     };
 
@@ -130,6 +148,8 @@ class _ClientScreenState extends State<ClientScreen> {
 
   void _handleQueueUpdate(Map<String, dynamic> data) {
     setState(() {
+      window1Ticket = data['window1'] ?? '---';
+      window2Ticket = data['window2'] ?? '---';
       if (data['pendingCount'] != null) {
         pendingCount =
             int.tryParse(data['pendingCount'].toString()) ?? pendingCount;
@@ -137,22 +157,9 @@ class _ClientScreenState extends State<ClientScreen> {
       if (data['nextUp'] is List) {
         final list = List<dynamic>.from(data['nextUp'] as List);
         nextQueue = list
-            .map((ticket) => {
-                  'ticket': ticket.toString(),
-                  'status': 'Ready',
-                })
+            .map((ticket) => {'ticket': ticket.toString(), 'status': 'Ready'})
             .toList();
       }
-      if (data['windows'] is List) {
-        final list = List<dynamic>.from(data['windows'] as List);
-        _windows = list
-            .map((w) => {
-                  'name': (w['name'] ?? '').toString(),
-                  'ticket': (w['ticket'] ?? '---').toString(),
-                })
-            .toList();
-      }
-      _calledWindow = data['calledWindow'] as String? ?? '';
     });
   }
 
@@ -217,8 +224,9 @@ class _ClientScreenState extends State<ClientScreen> {
 
   void _updateTime() {
     final now = DateTime.now();
-    final hour =
-        now.hour == 0 ? 12 : (now.hour > 12 ? now.hour - 12 : now.hour);
+    final hour = now.hour == 0
+        ? 12
+        : (now.hour > 12 ? now.hour - 12 : now.hour);
     final minute = now.minute.toString().padLeft(2, '0');
     final second = now.second.toString().padLeft(2, '0');
     final period = now.hour >= 12 ? 'PM' : 'AM';
@@ -241,23 +249,6 @@ class _ClientScreenState extends State<ClientScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final windowCards = _windows
-        .map((w) => Expanded(
-              child: _WindowDisplayCard(
-                title: w['name'] ?? '',
-                ticket: w['ticket'] ?? '---',
-                shouldPulse: _calledWindow == w['name'],
-              ),
-            ))
-        .toList();
-
-    // Interleave with SizedBoxes
-    final windowChildren = <Widget>[];
-    for (var i = 0; i < windowCards.length; i++) {
-      if (i > 0) windowChildren.add(const SizedBox(height: 12));
-      windowChildren.add(Expanded(child: windowCards[i]));
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFFDCDFE4),
       body: SafeArea(
@@ -265,7 +256,7 @@ class _ClientScreenState extends State<ClientScreen> {
           children: [
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: const EdgeInsets.all(10.0),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -344,8 +335,10 @@ class _ClientScreenState extends State<ClientScreen> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(
-                                        Icons.circle,
+                                      Icon(
+                                        _isConnected
+                                            ? Icons.circle
+                                            : Icons.circle,
                                         size: 8,
                                         color: Colors.white,
                                       ),
@@ -378,7 +371,19 @@ class _ClientScreenState extends State<ClientScreen> {
                             textColor: Colors.white,
                           ),
                           const SizedBox(height: 12),
-                          ...windowChildren,
+                          Expanded(
+                            child: _WindowDisplayCard(
+                              title: 'Window 1',
+                              ticket: window1Ticket,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Expanded(
+                            child: _WindowDisplayCard(
+                              title: 'Window 2',
+                              ticket: window2Ticket,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -407,15 +412,17 @@ class _ClientScreenState extends State<ClientScreen> {
                                       final item = nextQueue[index];
                                       return Container(
                                         margin: const EdgeInsets.only(
-                                            bottom: 8.0),
+                                          bottom: 8.0,
+                                        ),
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 16,
                                           vertical: 10,
                                         ),
                                         decoration: BoxDecoration(
                                           color: Colors.white,
-                                          borderRadius:
-                                              BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                         ),
                                         child: Row(
                                           children: [
@@ -442,12 +449,11 @@ class _ClientScreenState extends State<ClientScreen> {
                                             Container(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 4,
-                                              ),
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color:
-                                                    const Color(0xFFF1F5F9),
+                                                color: const Color(0xFFF1F5F9),
                                                 borderRadius:
                                                     BorderRadius.circular(6),
                                               ),
@@ -469,8 +475,7 @@ class _ClientScreenState extends State<ClientScreen> {
                           const SizedBox(height: 8),
                           Container(
                             width: double.infinity,
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
                             decoration: BoxDecoration(
                               color: const Color(0xFFE2E8F0),
                               borderRadius: BorderRadius.circular(10),
@@ -495,18 +500,17 @@ class _ClientScreenState extends State<ClientScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 5.0, vertical: 10.0),
+              padding: const EdgeInsets.only(left: 10, right: 10, top: 0, bottom: 10),
               child: Align(
                 alignment: Alignment.center,
                 child: FractionallySizedBox(
-                  widthFactor: 0.98,
+                  // widthFactor: 0.98,
                   child: Container(
                     height: 64,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.only(left: 10, right: 10, top: 10, bottom: 10),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF1E3A8A), Color(0xFF1D4ED8)],
+                        colors: [Color(0xFF1E3A8A), Color.fromARGB(255, 2, 4, 10)],
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
                       ),
@@ -519,11 +523,29 @@ class _ClientScreenState extends State<ClientScreen> {
                         ),
                       ],
                       border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.06)),
+                        color: Colors.white.withValues(alpha: 0.06),
+                      ),
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      // mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        ElevatedButton(
+                          onPressed: _toggleFullScreen,
+                          style: ElevatedButton.styleFrom(
+                            // fixedSize: const Size(50, 50),
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8), // Change to BorderRadius.zero for sharp corners
+                            ),
+                          ),
+                          child: Icon(
+                            _isFullScreen
+                                ? Icons.fullscreen_exit
+                                : Icons.fullscreen,
+                          ),
+                          
+                        ),
+                        SizedBox(width: 12,),
                         Text(
                           _status,
                           style: const TextStyle(
@@ -533,6 +555,8 @@ class _ClientScreenState extends State<ClientScreen> {
                             letterSpacing: 0.5,
                           ),
                         ),
+                        // CustomMarqueeText(text: "Hello There my Fello Dude's this Application is Created by Mr. Dirty Rats"),
+                        Spacer(),
                         Text(
                           _currentTime,
                           style: const TextStyle(
@@ -590,115 +614,52 @@ class _HeaderPill extends StatelessWidget {
   }
 }
 
-class _WindowDisplayCard extends StatefulWidget {
+class _WindowDisplayCard extends StatelessWidget {
   final String title;
   final String ticket;
-  final bool shouldPulse;
 
-  const _WindowDisplayCard({
-    required this.title,
-    required this.ticket,
-    this.shouldPulse = false,
-  });
-
-  @override
-  State<_WindowDisplayCard> createState() => _WindowDisplayCardState();
-}
-
-class _WindowDisplayCardState extends State<_WindowDisplayCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-  }
-
-  @override
-  void didUpdateWidget(_WindowDisplayCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.shouldPulse &&
-        (oldWidget.ticket != widget.ticket || oldWidget.shouldPulse != widget.shouldPulse)) {
-      _pulseController.forward(from: 0.0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
+  const _WindowDisplayCard({required this.title, required this.ticket});
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        final t = _pulseController.value;
-        final isPulsing = _pulseController.isAnimating;
-
-        // Pulse: background goes from grey -> amber -> grey
-        final bgColor = isPulsing
-            ? Color.lerp(
-                const Color(0xFFCBD5E1),
-                const Color(0xFFFBBF24),
-                t < 0.5 ? t * 2 : (1.0 - t) * 2,
-              ) ?? const Color(0xFFCBD5E1)
-            : const Color(0xFFCBD5E1);
-
-        // Ticket text color: indigo -> dark amber -> indigo
-        final ticketColor = isPulsing
-            ? Color.lerp(
-                const Color(0xFF4338CA),
-                const Color(0xFF92400E),
-                t < 0.5 ? t * 2 : (1.0 - t) * 2,
-              ) ?? const Color(0xFF4338CA)
-            : const Color(0xFF4338CA);
-
-        return Container(
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(16),
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFCBD5E1),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF475569),
+            ),
           ),
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              Text(
-                widget.title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF475569),
-                ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text(
-                      widget.ticket,
-                      style: TextStyle(
-                        fontSize: 42,
-                        fontWeight: FontWeight.w900,
-                        color: ticketColor,
-                        letterSpacing: 2.0,
-                      ),
-                    ),
+              child: Center(
+                child: Text(
+                  ticket,
+                  style: const TextStyle(
+                    fontSize: 42,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF4338CA),
+                    letterSpacing: 2.0,
                   ),
                 ),
               ),
-            ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
