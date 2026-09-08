@@ -112,7 +112,7 @@ class ServerService {
   }
 
   void sendTo(Socket socket, String type, Map<String, dynamic> data) {
-    final message = jsonEncode({'type': type, 'data': data}) + '\n';
+    final message = '${jsonEncode({'type': type, 'data': data})}\n';
     try {
       socket.add(utf8.encode(message));
     } catch (e) {
@@ -126,7 +126,7 @@ class ServerService {
 
   void broadcast(String type, Map<String, dynamic> data,
       {String? toRole}) {
-    final message = jsonEncode({'type': type, 'data': data}) + '\n';
+    final message = '${jsonEncode({'type': type, 'data': data})}\n';
     final bytes = utf8.encode(message);
     final deadClients = <Socket>[];
     for (final entry in _clients.entries) {
