@@ -26,8 +26,13 @@ class ClientScreen extends StatefulWidget {
   State<ClientScreen> createState() => _ClientScreenState();
 }
 
-class _ClientScreenState extends State<ClientScreen> {
+class _ClientScreenState extends State<ClientScreen>
+    with SingleTickerProviderStateMixin {
   bool _isFullScreen = false;
+  late final AnimationController _windowShakeController;
+  late final Animation<double> _windowShake;
+  Timer? _windowHighlightTimer;
+  String? _callingWindow;
 
   late final ClientService _client;
   late final Player _player;
@@ -56,6 +61,18 @@ class _ClientScreenState extends State<ClientScreen> {
   @override
   void initState() {
     super.initState();
+    _windowShakeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _windowShake = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0, end: -8), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -8, end: 8), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 8, end: -6), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -6, end: 5), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 5, end: -2), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -2, end: 0), weight: 1),
+    ]).animate(_windowShakeController);
     _player = Player();
     _videoController = VideoController(_player);
     _speechReady = _initializeSpeech();
@@ -135,6 +152,7 @@ class _ClientScreenState extends State<ClientScreen> {
           _handleVideoVolume(data);
           break;
         case 'ticket_called':
+          _highlightCallingWindow(data);
           _queueTicketAnnouncement(data);
           break;
       }
@@ -162,10 +180,37 @@ class _ClientScreenState extends State<ClientScreen> {
     }
   }
 
+  void _highlightCallingWindow(Map<String, dynamic> data) {
+    final window = data['window']?.toString();
+    if (window != 'Window 1' && window != 'Window 2') return;
+
+    _windowHighlightTimer?.cancel();
+    setState(() => _callingWindow = window);
+    _windowShakeController.forward(from: 0);
+    _windowHighlightTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (!mounted || _callingWindow != window) return;
+      setState(() => _callingWindow = null);
+    });
+  }
+
   void _handleQueueUpdate(Map<String, dynamic> data) {
     setState(() {
-      window1Ticket = data['window1'] ?? '---';
-      window2Ticket = data['window2'] ?? '---';
+      final windows = data['windows'];
+      if (windows is List) {
+        for (final entry in windows) {
+          if (entry is! Map) continue;
+          final name = entry['name']?.toString();
+          final ticket = entry['ticket']?.toString() ?? '---';
+          if (name == 'Window 1') {
+            window1Ticket = ticket;
+          } else if (name == 'Window 2') {
+            window2Ticket = ticket;
+          }
+        }
+      } else {
+        window1Ticket = data['window1']?.toString() ?? window1Ticket;
+        window2Ticket = data['window2']?.toString() ?? window2Ticket;
+      }
       if (data['pendingCount'] != null) {
         pendingCount =
             int.tryParse(data['pendingCount'].toString()) ?? pendingCount;
@@ -356,6 +401,8 @@ class _ClientScreenState extends State<ClientScreen> {
   @override
   void dispose() {
     _clockTimer.cancel();
+    _windowHighlightTimer?.cancel();
+    _windowShakeController.dispose();
     _completedSub?.cancel();
     _client.disconnect();
     _announcementPlayer.dispose();
@@ -492,6 +539,8 @@ class _ClientScreenState extends State<ClientScreen> {
                             child: _WindowDisplayCard(
                               title: 'Window 1',
                               ticket: window1Ticket,
+                              isCalling: _callingWindow == 'Window 1',
+                              shakeAnimation: _windowShake,
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -499,6 +548,8 @@ class _ClientScreenState extends State<ClientScreen> {
                             child: _WindowDisplayCard(
                               title: 'Window 2',
                               ticket: window2Ticket,
+                              isCalling: _callingWindow == 'Window 2',
+                              shakeAnimation: _windowShake,
                             ),
                           ),
                         ],
@@ -754,48 +805,94 @@ class _HeaderPill extends StatelessWidget {
 class _WindowDisplayCard extends StatelessWidget {
   final String title;
   final String ticket;
+  final bool isCalling;
+  final Animation<double> shakeAnimation;
 
-  const _WindowDisplayCard({required this.title, required this.ticket});
+  const _WindowDisplayCard({
+    required this.title,
+    required this.ticket,
+    required this.isCalling,
+    required this.shakeAnimation,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFCBD5E1),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF475569),
-            ),
+    return AnimatedBuilder(
+      animation: shakeAnimation,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: isCalling ? const Color(0xFFFEF3C7) : const Color(0xFFCBD5E1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isCalling ? const Color(0xFFF59E0B) : Colors.transparent,
+            width: 3,
           ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(
-                  ticket,
-                  style: const TextStyle(
-                    fontSize: 42,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF4338CA),
-                    letterSpacing: 2.0,
+          boxShadow: isCalling
+              ? [
+                  BoxShadow(
+                    color: Colors.amber.withValues(alpha: 0.4),
+                    blurRadius: 18,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : null,
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: isCalling
+                        ? const Color(0xFF92400E)
+                        : const Color(0xFF475569),
+                  ),
+                ),
+                if (isCalling) ...[
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.campaign_rounded,
+                    size: 20,
+                    color: Color(0xFFD97706),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  color: isCalling ? const Color(0xFFFFFBEB) : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    ticket,
+                    style: TextStyle(
+                      fontSize: 42,
+                      fontWeight: FontWeight.w900,
+                      color: isCalling
+                          ? const Color(0xFFB45309)
+                          : const Color(0xFF4338CA),
+                      letterSpacing: 2.0,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+      builder: (context, child) => Transform.translate(
+        offset: Offset(shakeAnimation.value, 0),
+        child: child,
       ),
     );
   }

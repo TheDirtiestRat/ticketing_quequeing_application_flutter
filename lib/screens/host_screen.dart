@@ -167,6 +167,7 @@ class _HostScreenState extends State<HostScreen> {
       });
     } else if (role == 'monitor') {
       _sendVideoToMonitor(sender);
+      _server.sendTo(sender, 'queue_update', _queueUpdateData());
     }
   }
 
@@ -229,7 +230,15 @@ class _HostScreenState extends State<HostScreen> {
   }
 
   void _broadcastQueue({String? calledWindow}) {
-    final data = <String, dynamic>{
+    final data = _queueUpdateData();
+    if (calledWindow != null) {
+      data['calledWindow'] = calledWindow;
+    }
+    _server.broadcast('queue_update', data);
+  }
+
+  Map<String, dynamic> _queueUpdateData() {
+    return <String, dynamic>{
       'pendingCount': _ticketEnd - _nextTicket + 1,
       'nextUp': List.generate(
         5,
@@ -239,10 +248,6 @@ class _HostScreenState extends State<HostScreen> {
           .map((w) => {'name': w, 'ticket': _windowTickets[w] ?? '---'})
           .toList(),
     };
-    if (calledWindow != null) {
-      data['calledWindow'] = calledWindow;
-    }
-    _server.broadcast('queue_update', data);
   }
 
   void _updateTicketRange() {
