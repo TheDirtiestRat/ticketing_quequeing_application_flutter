@@ -221,6 +221,25 @@ class _MenuScreenState extends State<MenuScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  // Credits Part
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '@Mr.DirtiestRat',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text("@Programmers Guild")
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ],

@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -28,9 +32,14 @@ class _ClientScreenState extends State<ClientScreen> {
   late final ClientService _client;
   late final Player _player;
   late final VideoController _videoController;
+  final AudioPlayer _announcementPlayer = AudioPlayer();
+  final FlutterTts _textToSpeech = FlutterTts();
+  Future<void> _speechReady = Future<void>.value();
+  Future<void> _announcementQueue = Future<void>.value();
 
   String _status = 'Connecting...';
   bool _isConnected = false;
+  double _videoVolume = 100;
 
   String window1Ticket = '---';
   String window2Ticket = '---';
@@ -49,6 +58,7 @@ class _ClientScreenState extends State<ClientScreen> {
     super.initState();
     _player = Player();
     _videoController = VideoController(_player);
+    _speechReady = _initializeSpeech();
     _initPlayer();
     _initClient();
     _startClock();
@@ -68,7 +78,7 @@ class _ClientScreenState extends State<ClientScreen> {
     bool isFS = await windowManager.isFullScreen();
     await windowManager.setFullScreen(!isFS);
 
-    print("Pressed Going to Fullscreen");
+    debugPrint('Pressed Going to Fullscreen');
 
     if (mounted) {
       setState(() {
@@ -90,6 +100,7 @@ class _ClientScreenState extends State<ClientScreen> {
     _client = ClientService(hostAddress: widget.hostAddress, port: widget.port);
 
     _client.onConnected = () {
+      _client.send('register', {'role': 'monitor'});
       if (mounted) {
         setState(() {
           _isConnected = true;
@@ -119,6 +130,12 @@ class _ClientScreenState extends State<ClientScreen> {
           break;
         case 'play_video_list':
           _handlePlayVideoList(data);
+          break;
+        case 'set_video_volume':
+          _handleVideoVolume(data);
+          break;
+        case 'ticket_called':
+          _queueTicketAnnouncement(data);
           break;
       }
     };
@@ -172,16 +189,114 @@ class _ClientScreenState extends State<ClientScreen> {
   }
 
   void _handlePlayVideoList(Map<String, dynamic> data) {
-    final paths = data['paths'];
-    if (paths is! List) return;
-    final rawPaths = List<String>.from(paths);
-    if (rawPaths.isEmpty) return;
-    _playlist = rawPaths.map((p) => _toMediaUri(p)).toList();
+    final mediaLocations = data['urls'] ?? data['paths'];
+    if (mediaLocations is! List) return;
+    final locations = mediaLocations.whereType<String>().toList();
+    if (locations.isEmpty) return;
+    _playlist = locations.map(_toMediaUri).toList();
     _currentPlaylistIndex = 0;
-    if (_playlist.isNotEmpty) {
-      final medias = _playlist.map((p) => Media(p)).toList();
-      _player.open(Playlist(medias)).then((_) => _player.play());
+    _playCurrentMedia();
+  }
+
+  void _handleVideoVolume(Map<String, dynamic> data) {
+    final volume = data['volume'];
+    if (volume is! num) return;
+    _videoVolume = volume.clamp(0, 100).toDouble();
+    _player.setVolume(_videoVolume).catchError((Object error) {
+      debugPrint('Failed to set video volume: $error');
+    });
+  }
+
+  Future<void> _initializeSpeech() async {
+    try {
+      await _textToSpeech.setLanguage('en-US');
+      await _textToSpeech.setSpeechRate(0.45);
+      await _textToSpeech.setVolume(1);
+      await _textToSpeech.setPitch(1);
+      await _textToSpeech.awaitSpeakCompletion(true);
+    } catch (error) {
+      debugPrint('Failed to initialize ticket announcements: $error');
     }
+  }
+
+  void _queueTicketAnnouncement(Map<String, dynamic> data) {
+    final ticket = data['ticket']?.toString().trim() ?? '';
+    final window = data['window']?.toString().trim() ?? '';
+    if (ticket.isEmpty || window.isEmpty) return;
+
+    _announcementQueue = _announcementQueue
+        .then((_) => _announceTicket(ticket, window))
+        .then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stackTrace) {
+            debugPrint('Failed to announce ticket $ticket: $error');
+          },
+        );
+  }
+
+  Future<void> _announceTicket(String ticket, String window) async {
+    try {
+      await _announcementPlayer.stop();
+      await _announcementPlayer.setVolume(0.7);
+      final playbackCompleted = _announcementPlayer.onPlayerComplete.first;
+      await _announcementPlayer.play(BytesSource(_createNotificationSound()));
+      await playbackCompleted.timeout(const Duration(seconds: 2));
+    } catch (error) {
+      debugPrint('Failed to play ticket notification sound: $error');
+    }
+    if (!mounted) return;
+    await _speechReady;
+    if (!mounted) return;
+    await _textToSpeech.speak(
+      '${ticket.replaceAll(RegExp(r'[-_]'), ' ')}, please proceed to $window.',
+    );
+  }
+
+  Uint8List _createNotificationSound() {
+    const sampleRate = 22050;
+    const notes = [
+      (frequency: 880.0, duration: 0.18),
+      (frequency: 1174.66, duration: 0.28),
+    ];
+    final samples = <int>[];
+    for (final note in notes) {
+      final noteSamples = (sampleRate * note.duration).round();
+      for (var i = 0; i < noteSamples; i++) {
+        final progress = i / noteSamples;
+        final envelope = math.pow(1 - progress, 2);
+        final sample =
+            math.sin(2 * math.pi * note.frequency * i / sampleRate) *
+            envelope *
+            0.55;
+        samples.add((sample * 32767).round());
+      }
+      samples.addAll(List<int>.filled((sampleRate * 0.035).round(), 0));
+    }
+
+    final data = ByteData(44 + samples.length * 2);
+    void writeAscii(int offset, String value) {
+      for (var i = 0; i < value.length; i++) {
+        data.setUint8(offset + i, value.codeUnitAt(i));
+      }
+    }
+
+    writeAscii(0, 'RIFF');
+    data.setUint32(4, 36 + samples.length * 2, Endian.little);
+    writeAscii(8, 'WAVE');
+    writeAscii(12, 'fmt ');
+    data.setUint32(16, 16, Endian.little);
+    data.setUint16(20, 1, Endian.little);
+    data.setUint16(22, 1, Endian.little);
+    data.setUint32(24, sampleRate, Endian.little);
+    data.setUint32(28, sampleRate * 2, Endian.little);
+    data.setUint16(32, 2, Endian.little);
+    data.setUint16(34, 16, Endian.little);
+    writeAscii(36, 'data');
+    data.setUint32(40, samples.length * 2, Endian.little);
+    for (var i = 0; i < samples.length; i++) {
+      data.setInt16(44 + i * 2, samples[i], Endian.little);
+    }
+    return data.buffer.asUint8List();
   }
 
   String _toMediaUri(String path) {
@@ -199,6 +314,7 @@ class _ClientScreenState extends State<ClientScreen> {
       return;
     }
     try {
+      await _player.setVolume(_videoVolume);
       await _player.open(Media(_playlist[_currentPlaylistIndex]));
       await _player.play();
     } catch (e) {
@@ -242,6 +358,8 @@ class _ClientScreenState extends State<ClientScreen> {
     _clockTimer.cancel();
     _completedSub?.cancel();
     _client.disconnect();
+    _announcementPlayer.dispose();
+    _textToSpeech.stop();
     _player.dispose();
     super.dispose();
   }
@@ -499,17 +617,30 @@ class _ClientScreenState extends State<ClientScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(left: 10, right: 10, top: 0, bottom: 10),
+              padding: const EdgeInsets.only(
+                left: 10,
+                right: 10,
+                top: 0,
+                bottom: 10,
+              ),
               child: Align(
                 alignment: Alignment.center,
                 child: FractionallySizedBox(
                   // widthFactor: 0.98,
                   child: Container(
                     height: 64,
-                    padding: const EdgeInsets.only(left: 10, right: 10, top: 10, bottom: 10),
+                    padding: const EdgeInsets.only(
+                      left: 10,
+                      right: 10,
+                      top: 10,
+                      bottom: 10,
+                    ),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF1E3A8A), Color.fromARGB(255, 2, 4, 10)],
+                        colors: [
+                          Color(0xFF1E3A8A),
+                          Color.fromARGB(255, 2, 4, 10),
+                        ],
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
                       ),
@@ -542,9 +673,8 @@ class _ClientScreenState extends State<ClientScreen> {
                                 ? Icons.fullscreen_exit
                                 : Icons.fullscreen,
                           ),
-                          
                         ),
-                        SizedBox(width: 12,),
+                        SizedBox(width: 12),
                         Text(
                           _status,
                           style: const TextStyle(
@@ -556,6 +686,14 @@ class _ClientScreenState extends State<ClientScreen> {
                         ),
                         // CustomMarqueeText(text: "Hello There my Fello Dude's this Application is Created by Mr. Dirty Rats"),
                         Spacer(),
+                        Text(
+                          "Develop By: @Mr.DirtiestRat with the @Programmers Guild",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                        SizedBox(width: 12),
                         Text(
                           _currentTime,
                           style: const TextStyle(

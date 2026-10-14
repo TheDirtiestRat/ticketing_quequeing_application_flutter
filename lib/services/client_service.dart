@@ -60,7 +60,7 @@ class ClientService {
 
   void send(String type, Map<String, dynamic> data) {
     if (_socket == null) return;
-    final message = jsonEncode({'type': type, 'data': data}) + '\n';
+    final message = '${jsonEncode({'type': type, 'data': data})}\n';
     try {
       _socket!.add(utf8.encode(message));
     } catch (e) {

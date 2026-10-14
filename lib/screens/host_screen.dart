@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/server_service.dart';
+import '../services/video_stream_service.dart';
 import 'menu_screen.dart';
 
 class HostScreen extends StatefulWidget {
@@ -17,8 +19,10 @@ class HostScreen extends StatefulWidget {
 
 class _HostScreenState extends State<HostScreen> {
   late final ServerService _server;
+  final VideoStreamService _videoStream = VideoStreamService();
   int _selectedTab = 0;
   List<String> _selectedVideos = [];
+  double _videoVolume = 100;
   String _hostAddress = '127.0.0.1';
 
   // Ticket queue
@@ -40,17 +44,92 @@ class _HostScreenState extends State<HostScreen> {
     _server = ServerService(port: widget.port);
     _server.onMessage = _handleClientMessage;
     _server.onClientDisconnect = _handleClientDisconnect;
-    _startServer();
+    _initializeHost();
   }
 
-  Future<void> _startServer() async {
+  Future<void> _initializeHost() async {
     try {
-      await _server.start();
+      final preferences = await SharedPreferences.getInstance();
+      _selectedVideos = preferences.getStringList('selected_video_paths') ?? [];
+      _selectedVideos = _selectedVideos
+          .where((path) => File(path).existsSync())
+          .toList();
+      _videoVolume = (preferences.getDouble('video_volume') ?? 100)
+          .clamp(0, 100)
+          .toDouble();
+      _videoStream.setPaths(_selectedVideos);
+      await _videoStream.start();
       _hostAddress = await _server.getHostAddress();
+      await _server.start();
       if (mounted) setState(() {});
     } catch (e) {
-      debugPrint('Failed to start server: $e');
+      debugPrint('Failed to initialize host: $e');
+      await _server.stop();
+      await _videoStream.stop();
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to start host: $e')));
+      }
     }
+  }
+
+  List<String> get _videoUrls => _videoStream.getUrls(_hostAddress);
+
+  void _sendVideoToMonitor(Socket monitor) {
+    _server.sendTo(monitor, 'set_video_volume', {'volume': _videoVolume});
+    if (_videoUrls.isNotEmpty) {
+      _server.sendTo(monitor, 'play_video_list', {'urls': _videoUrls});
+    }
+  }
+
+  void _broadcastVideoSelection() {
+    _videoStream.setPaths(_selectedVideos);
+    final urls = _videoUrls;
+    if (urls.isNotEmpty) {
+      _server.broadcast('play_video_list', {'urls': urls}, toRole: 'monitor');
+    }
+  }
+
+  Future<void> _saveSelectedVideoPaths() async {
+    try {
+      final saved = await (await SharedPreferences.getInstance()).setStringList(
+        'selected_video_paths',
+        _selectedVideos,
+      );
+      if (!saved) throw StateError('Video paths could not be saved.');
+    } catch (error) {
+      debugPrint('Failed to save selected video paths: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save selected videos: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveVideoVolume() async {
+    try {
+      final saved = await (await SharedPreferences.getInstance()).setDouble(
+        'video_volume',
+        _videoVolume,
+      );
+      if (!saved) throw StateError('Video volume could not be saved.');
+    } catch (error) {
+      debugPrint('Failed to save video volume: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save video volume: $error')),
+        );
+      }
+    }
+  }
+
+  void _setVideoVolume(double volume, {bool save = false}) {
+    setState(() => _videoVolume = volume);
+    _server.broadcast('set_video_volume', {
+      'volume': _videoVolume,
+    }, toRole: 'monitor');
+    if (save) _saveVideoVolume();
   }
 
   List<String> _getOccupiedWindows() => _tellerWindows.values.toList();
@@ -59,7 +138,10 @@ class _HostScreenState extends State<HostScreen> {
       _windows.where((w) => !_tellerWindows.containsValue(w)).toList();
 
   void _handleClientMessage(
-      String type, Map<String, dynamic> data, Socket sender) {
+    String type,
+    Map<String, dynamic> data,
+    Socket sender,
+  ) {
     switch (type) {
       case 'register':
         _handleRegister(data, sender);
@@ -83,6 +165,8 @@ class _HostScreenState extends State<HostScreen> {
         'available': _getAvailableWindows(),
         'occupied': _getOccupiedWindows(),
       });
+    } else if (role == 'monitor') {
+      _sendVideoToMonitor(sender);
     }
   }
 
@@ -112,11 +196,7 @@ class _HostScreenState extends State<HostScreen> {
 
     _windowTickets[window] = ticket;
 
-    // Broadcast ticket_assigned to ALL tellers
-    _server.broadcast('ticket_assigned', {
-      'ticket': ticket,
-      'window': window,
-    }, toRole: 'teller');
+    _broadcastTicketCall(ticket, window);
 
     _broadcastQueue(calledWindow: window);
     if (mounted) setState(() {});
@@ -128,14 +208,16 @@ class _HostScreenState extends State<HostScreen> {
     final ticket = _windowTickets[window];
     if (ticket == null || ticket == '---') return;
 
-    // Re-broadcast to highlight the window
-    _server.broadcast('ticket_assigned', {
-      'ticket': ticket,
-      'window': window,
-    }, toRole: 'teller');
+    _broadcastTicketCall(ticket, window);
 
     _broadcastQueue(calledWindow: window);
     if (mounted) setState(() {});
+  }
+
+  void _broadcastTicketCall(String ticket, String window) {
+    final call = {'ticket': ticket, 'window': window};
+    _server.broadcast('ticket_assigned', call, toRole: 'teller');
+    _server.broadcast('ticket_called', call, toRole: 'monitor');
   }
 
   void _handleClientDisconnect(Socket socket, String role) {
@@ -184,7 +266,8 @@ class _HostScreenState extends State<HostScreen> {
       setState(() {
         _selectedVideos = [path];
       });
-      _server.broadcast('play_video', {'path': path}, toRole: 'monitor');
+      await _saveSelectedVideoPaths();
+      _broadcastVideoSelection();
     } catch (error) {
       debugPrint('Error selecting video file: $error');
     }
@@ -211,7 +294,8 @@ class _HostScreenState extends State<HostScreen> {
       setState(() {
         _selectedVideos = files;
       });
-      _server.broadcast('play_video_list', {'paths': files}, toRole: 'monitor');
+      await _saveSelectedVideoPaths();
+      _broadcastVideoSelection();
     } catch (error) {
       debugPrint('Error selecting video directory: $error');
     }
@@ -220,6 +304,7 @@ class _HostScreenState extends State<HostScreen> {
   @override
   void dispose() {
     _server.stop();
+    _videoStream.stop();
     super.dispose();
   }
 
@@ -235,10 +320,7 @@ class _HostScreenState extends State<HostScreen> {
               padding: const EdgeInsets.all(16),
               child: IndexedStack(
                 index: _selectedTab,
-                children: [
-                  _buildTellerControl(),
-                  _buildMonitorManager(),
-                ],
+                children: [_buildTellerControl(), _buildMonitorManager()],
               ),
             ),
           ),
@@ -262,20 +344,24 @@ class _HostScreenState extends State<HostScreen> {
             children: [
               Row(
                 children: const [
-                  Icon(Icons.confirmation_num_rounded,
-                      color: Colors.indigo, size: 28),
+                  Icon(
+                    Icons.confirmation_num_rounded,
+                    color: Colors.indigo,
+                    size: 28,
+                  ),
                   SizedBox(width: 12),
                   Text(
                     'Queue System',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.indigo.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
@@ -343,8 +429,10 @@ class _HostScreenState extends State<HostScreen> {
                 const SizedBox(height: 10),
               ],
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: _server.isRunning
                       ? Colors.green.withValues(alpha: 0.1)
@@ -367,8 +455,7 @@ class _HostScreenState extends State<HostScreen> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color:
-                              _server.isRunning ? Colors.green : Colors.red,
+                          color: _server.isRunning ? Colors.green : Colors.red,
                         ),
                       ),
                     ),
@@ -441,16 +528,22 @@ class _HostScreenState extends State<HostScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Start',
-                                    style: TextStyle(
-                                        fontSize: 11, color: Colors.grey)),
+                                const Text(
+                                  'Start',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey,
+                                  ),
+                                ),
                                 const SizedBox(height: 4),
                                 TextField(
                                   keyboardType: TextInputType.number,
                                   decoration: InputDecoration(
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 10),
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8),
                                     ),
@@ -468,25 +561,35 @@ class _HostScreenState extends State<HostScreen> {
                           const SizedBox(width: 12),
                           const Padding(
                             padding: EdgeInsets.only(top: 16),
-                            child: Text('to',
-                                style: TextStyle(
-                                    fontSize: 14, color: Colors.grey)),
+                            child: Text(
+                              'to',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey,
+                              ),
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('End',
-                                    style: TextStyle(
-                                        fontSize: 11, color: Colors.grey)),
+                                const Text(
+                                  'End',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey,
+                                  ),
+                                ),
                                 const SizedBox(height: 4),
                                 TextField(
                                   keyboardType: TextInputType.number,
                                   decoration: InputDecoration(
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 10),
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8),
                                     ),
@@ -531,47 +634,49 @@ class _HostScreenState extends State<HostScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            ..._windows.map((w) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.laptop_mac_rounded,
+            ..._windows.map(
+              (w) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.laptop_mac_rounded,
+                        color: _windowTickets[w] != '---'
+                            ? Colors.indigo
+                            : Colors.grey[400],
+                        size: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        w,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _windowTickets[w] ?? '---',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                           color: _windowTickets[w] != '---'
                               ? Colors.indigo
                               : Colors.grey[400],
-                          size: 22,
                         ),
-                        const SizedBox(width: 12),
-                        Text(
-                          w,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          _windowTickets[w] ?? '---',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: _windowTickets[w] != '---'
-                                ? Colors.indigo
-                                : Colors.grey[400],
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                )),
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 12),
@@ -636,6 +741,28 @@ class _HostScreenState extends State<HostScreen> {
               ],
             ),
             const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(Icons.volume_up_rounded, color: Colors.indigo),
+                const SizedBox(width: 8),
+                const Text(
+                  'Client video volume',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Expanded(
+                  child: Slider(
+                    value: _videoVolume,
+                    min: 0,
+                    max: 100,
+                    divisions: 100,
+                    label: '${_videoVolume.round()}%',
+                    onChanged: (value) => _setVideoVolume(value),
+                    onChangeEnd: (value) => _setVideoVolume(value, save: true),
+                  ),
+                ),
+                SizedBox(width: 44, child: Text('${_videoVolume.round()}%')),
+              ],
+            ),
             if (_selectedVideos.isNotEmpty) ...[
               const Text(
                 'Selected Videos',
@@ -651,7 +778,7 @@ class _HostScreenState extends State<HostScreen> {
                   child: ListView.separated(
                     padding: const EdgeInsets.all(8),
                     itemCount: _selectedVideos.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       return ListTile(
                         dense: true,
@@ -667,9 +794,7 @@ class _HostScreenState extends State<HostScreen> {
                           ),
                         ),
                         title: Text(
-                          _selectedVideos[index]
-                              .split(RegExp(r'[/\\]'))
-                              .last,
+                          _selectedVideos[index].split(RegExp(r'[/\\]')).last,
                           style: const TextStyle(fontSize: 13),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -717,8 +842,9 @@ class _SidebarButton extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
-          color:
-              isSelected ? Colors.indigo.withValues(alpha: 0.1) : Colors.transparent,
+          color: isSelected
+              ? Colors.indigo.withValues(alpha: 0.1)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
