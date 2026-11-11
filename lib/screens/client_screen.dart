@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:flutter/services.dart';
 
 import '../services/client_service.dart';
 
@@ -91,6 +92,16 @@ class _ClientScreenState extends State<ClientScreen>
     }
   }
 
+  void _handleFullscreenShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return;
+
+    final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
+
+    if (isShiftPressed && event.logicalKey == LogicalKeyboardKey.keyF) {
+      _toggleFullScreen();
+    }
+  }
+
   Future<void> _toggleFullScreen() async {
     bool isFS = await windowManager.isFullScreen();
     await windowManager.setFullScreen(!isFS);
@@ -106,10 +117,13 @@ class _ClientScreenState extends State<ClientScreen>
 
   void _initPlayer() {
     _completedSub = _player.stream.completed.listen((completed) async {
-      if (!mounted || !completed) return;
-      if (_currentPlaylistIndex < _playlist.length - 1) {
-        await _playIndex(_currentPlaylistIndex + 1);
-      }
+      if (!mounted || !completed || _playlist.isEmpty) return;
+
+      // Move to the next video.
+      // If the current video is the last one, return to index 0.
+      final nextIndex = (_currentPlaylistIndex + 1) % _playlist.length;
+
+      await _playIndex(nextIndex);
     });
   }
 
@@ -413,354 +427,370 @@ class _ClientScreenState extends State<ClientScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFDCDFE4),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      flex: 12,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          color: Colors.black,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              AspectRatio(
-                                aspectRatio: 16 / 9,
-                                child: Video(controller: _videoController),
-                              ),
-                              Positioned(
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 14,
-                                  ),
-                                  decoration: const BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Color(0xFF1D4ED8),
-                                        Color(0xFF1E3A8A),
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            HardwareKeyboard.instance.isShiftPressed &&
+            event.logicalKey == LogicalKeyboardKey.keyF) {
+          _toggleFullScreen();
+
+          return KeyEventResult.handled;
+        }
+
+        return KeyEventResult.ignored;
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFDCDFE4),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(10.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        flex: 12,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            color: Colors.black,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                AspectRatio(
+                                  aspectRatio: 16 / 9,
+                                  child: Video(controller: _videoController),
+                                ),
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 14,
+                                    ),
+                                    decoration: const BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Color(0xFF1D4ED8),
+                                          Color(0xFF1E3A8A),
+                                        ],
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Text(
+                                          'ACLC ORMOC',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 26,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Text(
+                                          _isConnected
+                                              ? 'Please have your tickets ready'
+                                              : 'Connecting to server...',
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
                                       ],
-                                      begin: Alignment.centerLeft,
-                                      end: Alignment.centerRight,
                                     ),
                                   ),
-                                  child: Row(
-                                    children: [
-                                      const Text(
-                                        'ACLC ORMOC',
-                                        style: TextStyle(
+                                ),
+                                Positioned(
+                                  top: 12,
+                                  left: 12,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _isConnected
+                                          ? Colors.green.withValues(alpha: 0.8)
+                                          : Colors.red.withValues(alpha: 0.8),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          _isConnected
+                                              ? Icons.circle
+                                              : Icons.circle,
+                                          size: 8,
                                           color: Colors.white,
-                                          fontSize: 26,
-                                          fontWeight: FontWeight.w900,
-                                          letterSpacing: 0.5,
                                         ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Text(
-                                        _isConnected
-                                            ? 'Please have your tickets ready'
-                                            : 'Connecting to server...',
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          _isConnected ? 'ONLINE' : 'OFFLINE',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Positioned(
-                                top: 12,
-                                left: 12,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _isConnected
-                                        ? Colors.green.withValues(alpha: 0.8)
-                                        : Colors.red.withValues(alpha: 0.8),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        _isConnected
-                                            ? Icons.circle
-                                            : Icons.circle,
-                                        size: 8,
-                                        color: Colors.white,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        _isConnected ? 'ONLINE' : 'OFFLINE',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 5,
-                      child: Column(
-                        children: [
-                          const _HeaderPill(
-                            title: 'NOW SERVING',
-                            color: Color(0xFF4338CA),
-                            textColor: Colors.white,
-                          ),
-                          const SizedBox(height: 12),
-                          Expanded(
-                            child: _WindowDisplayCard(
-                              title: 'Window 1',
-                              ticket: window1Ticket,
-                              isCalling: _callingWindow == 'Window 1',
-                              shakeAnimation: _windowShake,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          children: [
+                            const _HeaderPill(
+                              title: 'NOW SERVING',
+                              color: Color(0xFF4338CA),
+                              textColor: Colors.white,
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          Expanded(
-                            child: _WindowDisplayCard(
-                              title: 'Window 2',
-                              ticket: window2Ticket,
-                              isCalling: _callingWindow == 'Window 2',
-                              shakeAnimation: _windowShake,
+                            const SizedBox(height: 12),
+                            Expanded(
+                              child: _WindowDisplayCard(
+                                title: 'Window 1',
+                                ticket: window1Ticket,
+                                isCalling: _callingWindow == 'Window 1',
+                                shakeAnimation: _windowShake,
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 12),
+                            Expanded(
+                              child: _WindowDisplayCard(
+                                title: 'Window 2',
+                                ticket: window2Ticket,
+                                isCalling: _callingWindow == 'Window 2',
+                                shakeAnimation: _windowShake,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 5,
-                      child: Column(
-                        children: [
-                          const _HeaderPill(
-                            title: 'NEXT IN LINE',
-                            color: Color(0xFFE2E8F0),
-                            textColor: Color(0xFF334155),
-                          ),
-                          const SizedBox(height: 12),
-                          Expanded(
-                            child: nextQueue.isEmpty
-                                ? const Center(
-                                    child: Text(
-                                      'No tickets queued',
-                                      style: TextStyle(color: Colors.black45),
-                                    ),
-                                  )
-                                : ListView.builder(
-                                    itemCount: nextQueue.length,
-                                    itemBuilder: (context, index) {
-                                      final item = nextQueue[index];
-                                      return Container(
-                                        margin: const EdgeInsets.only(
-                                          bottom: 8.0,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 10,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(
-                                            12,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          children: [
+                            const _HeaderPill(
+                              title: 'NEXT IN LINE',
+                              color: Color(0xFFE2E8F0),
+                              textColor: Color(0xFF334155),
+                            ),
+                            const SizedBox(height: 12),
+                            Expanded(
+                              child: nextQueue.isEmpty
+                                  ? const Center(
+                                      child: Text(
+                                        'No tickets queued',
+                                        style: TextStyle(color: Colors.black45),
+                                      ),
+                                    )
+                                  : ListView.builder(
+                                      itemCount: nextQueue.length,
+                                      itemBuilder: (context, index) {
+                                        final item = nextQueue[index];
+                                        return Container(
+                                          margin: const EdgeInsets.only(
+                                            bottom: 8.0,
                                           ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Text(
-                                              '${index + 1}',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 14,
-                                                color: Colors.black54,
-                                              ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
                                             ),
-                                            const SizedBox(width: 16),
-                                            Expanded(
-                                              child: Text(
-                                                item['ticket'] ?? '',
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Text(
+                                                '${index + 1}',
                                                 style: const TextStyle(
-                                                  fontSize: 22,
-                                                  fontWeight: FontWeight.w900,
-                                                  color: Colors.black87,
-                                                  letterSpacing: 1.0,
-                                                ),
-                                              ),
-                                            ),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 4,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFF1F5F9),
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                              ),
-                                              child: Text(
-                                                item['status'] ?? 'Ready',
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14,
                                                   color: Colors.black54,
                                                 ),
                                               ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE2E8F0),
-                              borderRadius: BorderRadius.circular(10),
+                                              const SizedBox(width: 16),
+                                              Expanded(
+                                                child: Text(
+                                                  item['ticket'] ?? '',
+                                                  style: const TextStyle(
+                                                    fontSize: 22,
+                                                    fontWeight: FontWeight.w900,
+                                                    color: Colors.black87,
+                                                    letterSpacing: 1.0,
+                                                  ),
+                                                ),
+                                              ),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(
+                                                    0xFFF1F5F9,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                ),
+                                                child: Text(
+                                                  item['status'] ?? 'Ready',
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.black54,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
                             ),
-                            child: Center(
-                              child: Text(
-                                '$pendingCount PENDING',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF334155),
-                                  letterSpacing: 1.0,
+                            const SizedBox(height: 8),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE2E8F0),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '$pendingCount PENDING',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF334155),
+                                    letterSpacing: 1.0,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(
-                left: 10,
-                right: 10,
-                top: 0,
-                bottom: 10,
-              ),
-              child: Align(
-                alignment: Alignment.center,
-                child: FractionallySizedBox(
-                  // widthFactor: 0.98,
-                  child: Container(
-                    height: 64,
-                    padding: const EdgeInsets.only(
-                      left: 10,
-                      right: 10,
-                      top: 10,
-                      bottom: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [
-                          Color(0xFF1E3A8A),
-                          Color.fromARGB(255, 2, 4, 10),
-                        ],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: 10,
+                  right: 10,
+                  top: 0,
+                  bottom: 10,
+                ),
+                child: Align(
+                  alignment: Alignment.center,
+                  child: FractionallySizedBox(
+                    // widthFactor: 0.98,
+                    child: Container(
+                      height: 64,
+                      padding: const EdgeInsets.only(
+                        left: 10,
+                        right: 10,
+                        top: 10,
+                        bottom: 10,
                       ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.16),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF1E3A8A),
+                            Color.fromARGB(255, 2, 4, 10),
+                          ],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
                         ),
-                      ],
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.16),
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
                       ),
-                    ),
-                    child: Row(
-                      // mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        ElevatedButton(
-                          onPressed: _toggleFullScreen,
-                          style: ElevatedButton.styleFrom(
-                            // fixedSize: const Size(50, 50),
-                            padding: EdgeInsets.zero,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8), // Change to BorderRadius.zero for sharp corners
+                      child: Row(
+                        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          ElevatedButton(
+                            onPressed: _toggleFullScreen,
+                            style: ElevatedButton.styleFrom(
+                              // fixedSize: const Size(50, 50),
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8), // Change to BorderRadius.zero for sharp corners
+                              ),
+                            ),
+                            child: Icon(
+                              _isFullScreen
+                                  ? Icons.fullscreen_exit
+                                  : Icons.fullscreen,
                             ),
                           ),
-                          child: Icon(
-                            _isFullScreen
-                                ? Icons.fullscreen_exit
-                                : Icons.fullscreen,
+                          SizedBox(width: 12),
+                          Text(
+                            _status,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              letterSpacing: 0.5,
+                            ),
                           ),
-                        ),
-                        SizedBox(width: 12),
-                        Text(
-                          _status,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                            letterSpacing: 0.5,
+                          // CustomMarqueeText(text: "Hello There my Fello Dude's this Application is Created by Mr. Dirty Rats"),
+                          Spacer(),
+                          Text(
+                            "Develop By: @Mr.DirtiestRat with the @Programmers Guild",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
                           ),
-                        ),
-                        // CustomMarqueeText(text: "Hello There my Fello Dude's this Application is Created by Mr. Dirty Rats"),
-                        Spacer(),
-                        Text(
-                          "Develop By: @Mr.DirtiestRat with the @Programmers Guild",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
+                          SizedBox(width: 12),
+                          Text(
+                            _currentTime,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.0,
+                            ),
                           ),
-                        ),
-                        SizedBox(width: 12),
-                        Text(
-                          _currentTime,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
