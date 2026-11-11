@@ -601,75 +601,78 @@ class _ClientScreenState extends State<ClientScreen>
                                         style: TextStyle(color: Colors.black45),
                                       ),
                                     )
-                                  : ListView.builder(
-                                      itemCount: nextQueue.length,
-                                      itemBuilder: (context, index) {
-                                        final item = nextQueue[index];
-                                        return Container(
-                                          margin: const EdgeInsets.only(
-                                            bottom: 8.0,
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 16,
-                                            vertical: 10,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Text(
-                                                '${index + 1}',
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 14,
-                                                  color: Colors.black54,
-                                                ),
+                                  : LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final rowHeight = math.max(
+                                          60.0,
+                                          constraints.maxHeight /
+                                              nextQueue.length,
+                                        );
+
+                                        return ListView.builder(
+                                          padding: EdgeInsets.zero,
+                                          itemCount: nextQueue.length,
+                                          itemExtent: rowHeight,
+                                          itemBuilder: (context, index) {
+                                            final item = nextQueue[index];
+
+                                            return Padding(
+                                              padding: const EdgeInsets.only(
+                                                bottom: 12,
                                               ),
-                                              const SizedBox(width: 16),
-                                              Expanded(
-                                                child: Text(
-                                                  item['ticket'] ?? '',
-                                                  style: const TextStyle(
-                                                    fontSize: 22,
-                                                    fontWeight: FontWeight.w900,
-                                                    color: Colors.black87,
-                                                    letterSpacing: 1.0,
-                                                  ),
-                                                ),
-                                              ),
-                                              Container(
+                                              child: Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 4,
+                                                      horizontal: 16,
+                                                      vertical: 10,
                                                     ),
                                                 decoration: BoxDecoration(
-                                                  color: const Color(
-                                                    0xFFF1F5F9,
-                                                  ),
+                                                  color: Colors.white,
                                                   borderRadius:
-                                                      BorderRadius.circular(6),
+                                                      BorderRadius.circular(12),
                                                 ),
-                                                child: Text(
-                                                  item['status'] ?? 'Ready',
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.black54,
-                                                  ),
+                                                child: Row(
+                                                  children: [
+                                                    Text(
+                                                      '${index + 1}',
+                                                      style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 14,
+                                                        color: Colors.black54,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 16),
+                                                    Expanded(
+                                                      child: Text(
+                                                        item['ticket'] ?? '',
+                                                        style: const TextStyle(
+                                                          fontSize: 22,
+                                                          fontWeight:
+                                                              FontWeight.w900,
+                                                          color: Colors.black87,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      item['status'] ?? 'Ready',
+                                                      style: const TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: Colors.black54,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
-                                            ],
-                                          ),
+                                            );
+                                          },
                                         );
                                       },
                                     ),
                             ),
-                            const SizedBox(height: 8),
+                            // const SizedBox(height: 4),
                             Container(
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(vertical: 14),
