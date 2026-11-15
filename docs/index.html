@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f7f8fc">
+  <meta name="description"
+    content="A simple, connected ticketing and queueing application for managing service windows and customer flow.">
+  <title>QueueFlow — Ticketing & Queueing System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --blue: #4053bd;
+      --blue-dark: #2e3e9f;
+      --ink: #171b2d;
+      --muted: #697087;
+      --line: #e8eaf2;
+      --bg: #f7f8fc;
+      --white: #fff;
+      --green: #2eaa67;
+      --shadow: 0 22px 70px rgba(34, 43, 94, .10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "DM Sans", sans-serif;
+      line-height: 1.6;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .wrap {
+      width: min(1160px, calc(100% - 44px));
+      margin: auto;
+    }
+
+    .nav {
+      height: 82px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      font: 800 18px Manrope, sans-serif;
+      letter-spacing: -.5px;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 39px;
+      height: 39px;
+      border-radius: 12px;
+      color: white;
+      background: var(--blue);
+      box-shadow: 0 8px 18px #4053bd40;
+    }
+
+    .brand-mark svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 30px;
+      color: #555d75;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .nav-links a:hover {
+      color: var(--blue);
+    }
+
+    .nav-download {
+      background: var(--blue);
+      color: white !important;
+      padding: 11px 18px;
+      border-radius: 10px;
+      box-shadow: 0 7px 16px #4053bd30;
+    }
+
+    .hero {
+      padding: 65px 0 90px;
+      display: grid;
+      grid-template-columns: .92fr 1.08fr;
+      align-items: center;
+      gap: 48px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--blue);
+      background: #edf0ff;
+      border: 1px solid #e0e5ff;
+      padding: 7px 12px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+    }
+
+    .eyebrow span {
+      width: 7px;
+      height: 7px;
+      background: #36b875;
+      border-radius: 50%;
+      box-shadow: 0 0 0 4px #36b87520;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-family: Manrope, sans-serif;
+      letter-spacing: -1.4px;
+      line-height: 1.14;
+    }
+
+    h1 {
+      font-size: clamp(42px, 5.2vw, 66px);
+      margin: 22px 0 20px;
+      max-width: 610px;
+    }
+
+    h1 em {
+      color: var(--blue);
+      font-style: normal;
+    }
+
+    .hero-copy {
+      color: var(--muted);
+      font-size: 17px;
+      max-width: 510px;
+      margin: 0 0 30px;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 13px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border-radius: 12px;
+      padding: 14px 20px;
+      font-weight: 800;
+      font-size: 14px;
+      transition: .2s ease;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+
+    .btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .btn-primary {
+      color: white;
+      background: var(--blue);
+      box-shadow: 0 10px 22px #4053bd38;
+    }
+
+    .btn-primary:hover {
+      background: var(--blue-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 14px 26px #4053bd45;
+    }
+
+    .btn-secondary {
+      color: #3e4661;
+      border-color: #dfe2ed;
+      background: white;
+    }
+
+    .btn-secondary:hover {
+      border-color: #aeb7e8;
+      transform: translateY(-2px);
+    }
+
+    .release-note {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #858ba0;
+      font-size: 12px;
+      margin-top: 16px;
+    }
+
+    .release-note svg {
+      width: 14px;
+      height: 14px;
+      color: var(--green);
+    }
+
+    .visual {
+      position: relative;
+      min-width: 0;
+      padding: 15px 0 22px 18px;
+    }
+
+    .visual:before {
+      content: "";
+      position: absolute;
+      inset: 8% -2% 0 8%;
+      background: linear-gradient(135deg, #e6eaff, #f2f4ff);
+      border-radius: 32px;
+      transform: rotate(3deg);
+    }
+
+    .screen-frame {
+      position: relative;
+      border: 8px solid #202333;
+      border-radius: 18px;
+      overflow: hidden;
+      background: #f2f3f6;
+      box-shadow: var(--shadow);
+      transform: rotate(-1deg);
+    }
+
+    .screen-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .floating-card {
+      position: absolute;
+      right: -14px;
+      bottom: -5px;
+      background: white;
+      border: 1px solid #edf0f6;
+      border-radius: 15px;
+      box-shadow: 0 14px 34px #1c28501c;
+      padding: 13px 17px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+
+    .floating-icon {
+      width: 37px;
+      height: 37px;
+      border-radius: 11px;
+      display: grid;
+      place-items: center;
+      color: var(--green);
+      background: #eaf8f0;
+    }
+
+    .floating-icon svg {
+      width: 19px;
+      height: 19px;
+    }
+
+    .floating-card strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .floating-card small {
+      display: block;
+      color: #8b91a4;
+      font-size: 11px;
+    }
+
+    .trust {
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 19px 0;
+    }
+
+    .trust-inner {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 13px;
+      color: #747b91;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .trust-inner svg {
+      color: var(--green);
+      width: 17px;
+      height: 17px;
+    }
+
+    section {
+      padding: 88px 0;
+    }
+
+    .section-heading {
+      text-align: center;
+      max-width: 660px;
+      margin: 0 auto 42px;
+    }
+
+    .section-heading h2 {
+      font-size: clamp(30px, 3.8vw, 43px);
+      margin: 13px 0;
+    }
+
+    .section-heading p {
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .feature {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 25px;
+      box-shadow: 0 7px 24px #1d28500a;
+    }
+
+    .feature-icon {
+      width: 45px;
+      height: 45px;
+      display: grid;
+      place-items: center;
+      border-radius: 13px;
+      color: var(--blue);
+      background: #edf0ff;
+      margin-bottom: 18px;
+    }
+
+    .feature-icon svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .feature h3 {
+      font-size: 17px;
+      letter-spacing: -.4px;
+      margin: 0 0 8px;
+    }
+
+    .feature p {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .showcase {
+      background: #fff;
+    }
+
+    .showcase-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 26px;
+      align-items: start;
+    }
+
+    .showcase-grid .shot:last-child {
+      grid-column: 1 / -1;
+      width: calc(50% - 13px);
+      justify-self: center;
+    }
+
+    .shot img {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      display: block;
+    }
+
+    .shot {
+      border: 1px solid #e7e9f1;
+      border-radius: 18px;
+      overflow: hidden;
+      background: #f2f3f6;
+      box-shadow: 0 14px 38px #202b5010;
+    }
+
+    .shot img {
+      width: 100%;
+      display: block;
+    }
+
+    .shot-caption {
+      padding: 18px 20px;
+      background: white;
+    }
+
+    .shot-caption strong {
+      display: block;
+      font: 700 16px Manrope, sans-serif;
+    }
+
+    .shot-caption span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      counter-reset: step;
+    }
+
+    .step {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      padding: 23px;
+    }
+
+    .step-number {
+      color: var(--blue);
+      background: #edf0ff;
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 13px;
+      margin-bottom: 15px;
+    }
+
+    .step h3 {
+      font-size: 16px;
+      letter-spacing: -.4px;
+      margin: 0 0 7px;
+    }
+
+    .step p {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .cta {
+      padding: 0 0 88px;
+    }
+
+    .cta-panel {
+      position: relative;
+      overflow: hidden;
+      border-radius: 26px;
+      padding: 54px 30px;
+      text-align: center;
+      color: white;
+      background: linear-gradient(120deg, #3546a9, #5368d6);
+      box-shadow: 0 20px 45px #4053bd30;
+    }
+
+    .cta-panel:before,
+    .cta-panel:after {
+      content: "";
+      position: absolute;
+      border: 1px solid #ffffff20;
+      border-radius: 50%;
+      width: 300px;
+      height: 300px;
+    }
+
+    .cta-panel:before {
+      left: -120px;
+      top: -190px;
+    }
+
+    .cta-panel:after {
+      right: -110px;
+      bottom: -220px;
+      width: 390px;
+      height: 390px;
+    }
+
+    .cta-panel>* {
+      position: relative;
+      z-index: 1;
+    }
+
+    .cta-panel h2 {
+      font-size: clamp(28px, 4vw, 42px);
+      margin: 0 0 12px;
+    }
+
+    .cta-panel p {
+      color: #e2e6ff;
+      margin: 0 auto 25px;
+      max-width: 560px;
+    }
+
+    .cta-panel .btn {
+      background: white;
+      color: var(--blue-dark);
+    }
+
+    .cta-panel .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 24px #17245c50;
+    }
+
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 27px 0;
+      color: #81879a;
+      font-size: 12px;
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .footer-brand {
+      color: var(--ink);
+      font-weight: 800;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 20px;
+    }
+
+    .footer-links a:hover {
+      color: var(--blue);
+    }
+
+    @media (max-width: 850px) {
+      .hero {
+        grid-template-columns: 1fr;
+        padding-top: 35px;
+        gap: 24px;
+      }
+
+      .hero-copy {
+        max-width: 620px;
+      }
+
+      .visual {
+        max-width: 700px;
+        margin: 0 auto;
+      }
+
+      .feature-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .wrap {
+        width: min(100% - 30px, 1160px);
+      }
+
+      .nav {
+        height: 70px;
+      }
+
+      .nav-links a:not(.nav-download) {
+        display: none;
+      }
+
+      .nav-download {
+        padding: 9px 12px;
+        font-size: 12px;
+      }
+
+      .hero {
+        padding: 38px 0 60px;
+      }
+
+      h1 {
+        font-size: 42px;
+      }
+
+      .hero-copy {
+        font-size: 15px;
+      }
+
+      .actions {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+      }
+
+      .visual {
+        padding-left: 0;
+      }
+
+      .screen-frame {
+        border-width: 5px;
+        border-radius: 12px;
+      }
+
+      .floating-card {
+        right: -4px;
+        bottom: -18px;
+        transform: scale(.88);
+        transform-origin: right bottom;
+      }
+
+      section {
+        padding: 65px 0;
+      }
+
+      .feature-grid,
+      .showcase-grid,
+      .steps {
+        grid-template-columns: 1fr;
+      }
+
+      .section-heading {
+        margin-bottom: 28px;
+      }
+
+      .cta {
+        padding-bottom: 65px;
+      }
+
+      .cta-panel {
+        padding: 42px 22px;
+      }
+
+      .footer-inner {
+        flex-direction: column;
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="wrap nav">
+    <a class="brand" href="#top" aria-label="QueueFlow home">
+      <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 5h16v4a2 2 0 0 0 0 4v6H4v-6a2 2 0 0 0 0-4V5Z" />
+          <path d="M9 8h.01M9 12h.01M9 16h.01" />
+        </svg></span>
+      QueueFlow
+    </a>
+    <nav class="nav-links" aria-label="Main navigation">
+      <a href="#features">Features</a>
+      <a href="#screenshots">Screenshots</a>
+      <a href="#install">Installation</a>
+      <a class="nav-download"
+        href="https://github.com/TheDirtiestRat/ticketing_quequeing_application_flutter/releases/tag/v2.5"
+        target="_blank" rel="noopener">Download v2.5 ↗</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <div class="wrap hero">
+      <div>
+        <div class="eyebrow"><span></span> Ticketing &amp; Queue Management</div>
+        <h1>Make every queue feel <em>more organized.</em></h1>
+        <p class="hero-copy">A desktop ticketing and queueing application designed to help service teams manage customer
+          flow, call the next ticket, and serve customers across multiple windows.</p>
+        <div class="actions">
+          <a class="btn btn-primary"
+            href="https://github.com/TheDirtiestRat/ticketing_quequeing_application_flutter/releases/tag/v2.5"
+            target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <path d="m7 10 5 5 5-5M12 15V3" />
+            </svg>
+            Download Application
+          </a>
+          <a class="btn btn-secondary" href="#screenshots">Explore the app</a>
+        </div>
+        <div class="release-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="m5 12 4 4L19 6" />
+          </svg>
+          Get the latest available installer from GitHub Releases
+        </div>
+      </div>
+      <div class="visual">
+        <div class="screen-frame"><img src="assets/teller-window.png"
+            alt="Ticketing Queueing Application teller window showing queue status and call controls"></div>
+        <div class="floating-card">
+          <span class="floating-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 12.5 9.2 17 19 7" />
+            </svg></span>
+          <span><strong>Connected to host</strong><small>Window status at a glance</small></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="trust">
+      <div class="wrap trust-inner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="M5 12.5 9.2 17 19 7" />
+        </svg>
+        Built to make customer service queues easier to manage
+      </div>
+    </div>
+
+    <section id="features">
+      <div class="wrap">
+        <div class="section-heading">
+          <div class="eyebrow">Designed for daily service</div>
+          <h2>Queue management, made straightforward.</h2>
+          <p>Keep the essential queue operations easy to find, with a clear interface for service-window staff.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 5h16v4a2 2 0 0 0 0 4v6H4v-6a2 2 0 0 0 0-4V5Z" />
+                <path d="M9 8h.01M9 12h.01M9 16h.01" />
+              </svg></div>
+            <h3>Ticket queue workflow</h3>
+            <p>Support an organized customer flow with a queue-focused interface for service operations.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="14" rx="2" />
+                <path d="M8 22h8M12 18v4" />
+              </svg></div>
+            <h3>Multiple service windows</h3>
+            <p>Let staff select their assigned window, such as Window 1 or Window 2.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+              </svg></div>
+            <h3>Call-next controls</h3>
+            <p>Give tellers a direct way to call the next customer and repeat the current call.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 3-6.7" />
+                <path d="M3 4v5h5M12 7v5l3 2" />
+              </svg></div>
+            <h3>Live queue status</h3>
+            <p>View the serving area and pending count in the teller interface.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 10v4h4l5 4V6l-5 4H3Z" />
+                <path d="M16 9a5 5 0 0 1 0 6M19 6a9 9 0 0 1 0 12" />
+              </svg></div>
+            <h3>Chime sound selection</h3>
+            <p>Choose a chime sound for customer call announcements.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3 4 7v5c0 5 3.4 8 8 9 4.6-1 8-4 8-9V7l-8-4Z" />
+                <path d="m9 12 2 2 4-4" />
+              </svg></div>
+            <h3>Host connection indicator</h3>
+            <p>See the connection status from the teller screen at a glance.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="showcase" id="screenshots">
+      <div class="wrap">
+        <div class="section-heading">
+          <div class="eyebrow">Inside the application</div>
+          <h2>A closer look at the interface.</h2>
+          <p>Explore the actual application screens, provided by the developer.</p>
+        </div>
+        <div class="showcase-grid">
+          <article class="shot">
+            <img src="assets/teller-window.png"
+              alt="Teller queue screen with online connection, currently serving, call next and pending controls"
+              loading="lazy">
+            <div class="shot-caption"><strong>Teller / Service Window</strong><span>Monitor the queue, call the next
+                ticket, and manage the current call.</span></div>
+          </article>
+          <article class="shot">
+            <img src="assets/window-selection.png" alt="Window selection screen with Window 1 and Window 2 choices"
+              loading="lazy">
+            <div class="shot-caption"><strong>Window Selection</strong><span>Select the service window assigned to the
+                staff member.</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="install">
+      <div class="wrap">
+        <div class="section-heading">
+          <div class="eyebrow">Get started</div>
+          <h2>Download and install.</h2>
+          <p>Get the application from the official GitHub release page. Follow the release notes and installer files
+            provided there.</p>
+        </div>
+        <div class="steps">
+          <article class="step">
+            <div class="step-number">01</div>
+            <h3>Open the release page</h3>
+            <p>Click the download button to visit the project's GitHub v2.5 release.</p>
+          </article>
+          <article class="step">
+            <div class="step-number">02</div>
+            <h3>Download the installer</h3>
+            <p>Under the release's Assets section, choose the installer or package that matches your device.</p>
+          </article>
+          <article class="step">
+            <div class="step-number">03</div>
+            <h3>Install and launch</h3>
+            <p>Run the downloaded installer and follow the installation instructions included with the release.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <div class="wrap cta">
+      <div class="cta-panel">
+        <h2>Ready to organize your queue?</h2>
+        <p>Visit the official release page to download Ticketing Queueing Application v2.5.</p>
+        <a class="btn"
+          href="https://github.com/TheDirtiestRat/ticketing_quequeing_application_flutter/releases/tag/v2.5"
+          target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <path d="m7 10 5 5 5-5M12 15V3" />
+          </svg>
+          Download from GitHub
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap footer-inner">
+      <div><span class="footer-brand">QueueFlow</span> · Ticketing Queueing Application</div>
+      <div>Release v2.5 · <a href="https://github.com/TheDirtiestRat/ticketing_quequeing_application_flutter"
+          target="_blank" rel="noopener">View source on GitHub ↗</a></div>
+    </div>
+  </footer>
+</body>
+
+</html>
